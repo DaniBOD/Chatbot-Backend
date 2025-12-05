@@ -1,0 +1,267 @@
+# Chatbot Backend - Cooperativa de Agua Potable
+
+## 📋 Descripción
+
+Sistema de chatbot inteligente con RAG (Retrieval-Augmented Generation) para la gestión de emergencias y consultas en una Cooperativa de Agua Potable Rural.
+
+## 🎯 Características
+
+### Módulo de Emergencias ✅
+- ✅ **Chatbot Conversacional**: Entrevista guiada para reporte de emergencias
+- ✅ **Sistema RAG**: Base de conocimiento con protocolos, sectores, contactos y FAQ
+- ✅ **Integración LLM**: Google Gemini para procesamiento de lenguaje natural
+- ✅ **Cálculo Automático de Prioridad**: 4 niveles (baja, media, alta, crítica)
+- ✅ **API REST Completa**: Endpoints para chat, emergencias y estadísticas
+- ✅ **Historial Persistente**: Almacenamiento de conversaciones y mensajes
+
+### Módulo de Boletas 🔜
+- En desarrollo
+
+## 🛠️ Tecnologías
+
+**Backend:**
+- Django 5.2.8
+- Django REST Framework 3.16.1
+- Google Gemini (gemini-pro)
+- ChromaDB 0.5.23
+- LangChain 0.3.13
+- Sentence Transformers
+
+**Base de Datos:**
+- SQLite (desarrollo)
+- PostgreSQL (producción)
+
+## 🚀 Inicio Rápido
+
+### 1. Instalación
+
+```bash
+# Clonar repositorio
+git clone https://github.com/DaniBOD/Chatbot-Backend.git
+cd Chatbot-Backend/Backend
+
+# Crear entorno virtual
+python -m venv venv
+venv\Scripts\activate  # Windows
+
+# Instalar dependencias
+pip install -r requirements.txt
+```
+
+### 2. Configuración
+
+```bash
+# Configurar API key de Gemini en .env
+GEMINI_API_KEY=tu_api_key_aqui
+```
+
+Obtener API key en: https://makersuite.google.com/app/apikey
+
+### 3. Base de Datos
+
+```bash
+# Crear migraciones
+python manage.py makemigrations
+python manage.py migrate
+
+# Crear superusuario
+python manage.py createsuperuser
+```
+
+### 4. Ingestar Documentos RAG
+
+```bash
+python manage.py shell < ModuloEmergencia/RAG/ingest_documents.py
+```
+
+### 5. Iniciar Servidor
+
+```bash
+python manage.py runserver
+```
+
+Servidor: http://localhost:8000
+Admin: http://localhost:8000/admin/
+
+## 📖 Documentación
+
+- **Guía Rápida**: [INICIO_RAPIDO.md](INICIO_RAPIDO.md)
+- **Documentación Completa**: [Doc/Documentacion-Emergencia.md](Doc/Documentacion-Emergencia.md)
+- **Diagramas**: [Doc/](Doc/) (incluye diagramas de flujo y base de datos)
+
+## 🌐 API Endpoints
+
+### Chat
+```
+POST   /api/emergencias/chat/init/           - Iniciar conversación
+POST   /api/emergencias/chat/message/        - Enviar mensaje
+GET    /api/emergencias/chat/status/{id}/    - Ver estado
+```
+
+### Emergencias
+```
+GET    /api/emergencias/emergencias/         - Listar emergencias
+GET    /api/emergencias/emergencias/{id}/    - Ver detalle
+PATCH  /api/emergencias/emergencias/{id}/    - Actualizar
+GET    /api/emergencias/emergencias/estadisticas/  - Estadísticas
+```
+
+### RAG
+```
+GET    /api/emergencias/rag/stats/           - Estadísticas del sistema
+```
+
+## 📁 Estructura del Proyecto
+
+```
+Backend/
+├── chatbot_backend/          # Configuración Django
+│   ├── settings.py
+│   └── urls.py
+├── ModuloEmergencia/         # Módulo de emergencias ✅
+│   ├── models.py            # Emergencia, ChatConversation, ChatMessage
+│   ├── views.py             # API REST endpoints
+│   ├── serializers.py       # DRF serializers
+│   ├── admin.py             # Admin panel
+│   ├── services/            # Lógica de negocio
+│   │   └── chatbot_service.py
+│   └── RAG/                 # Sistema RAG
+│       ├── vector_store.py  # ChromaDB
+│       ├── embeddings.py    # Procesamiento de docs
+│       ├── retriever.py     # Recuperación de info
+│       ├── ingest_documents.py  # Script de ingesta
+│       └── knowledge_base/  # Base de conocimiento
+│           ├── protocolos_emergencias.md
+│           ├── sectores_informacion.md
+│           ├── contactos_cooperativa.md
+│           └── faq_preguntas_frecuentes.md
+├── ModuloBoletas/           # Módulo de boletas 🔜
+├── Doc/                     # Documentación
+│   └── Documentacion-Emergencia.md
+├── requirements.txt         # Dependencias Python
+├── .env.example            # Ejemplo de variables de entorno
+└── manage.py               # Django management
+```
+
+## 🧪 Ejemplo de Uso
+
+```python
+import requests
+
+# 1. Iniciar conversación
+response = requests.post('http://localhost:8000/api/emergencias/chat/init/')
+session_id = response.json()['session_id']
+
+# 2. Reportar emergencia
+response = requests.post('http://localhost:8000/api/emergencias/chat/message/', json={
+    'session_id': session_id,
+    'message': 'Tengo una fuga de agua muy grande en El Molino, calle Principal 123'
+})
+
+print(response.json()['message'])
+# Bot: "Entiendo que tienes una fuga en El Molino. ¿Cuál es tu nombre?"
+
+# 3. Continuar conversación...
+# El bot recolecta X1-X7, calcula prioridad y registra la emergencia
+```
+
+## 🎯 Flujo del Chatbot
+
+1. **Inicio**: Saludo y explicación
+2. **Recolección**: Recopila 7 datos clave (sector, nombre, teléfono, dirección, etc.)
+3. **Análisis**: Extrae información usando Gemini + RAG
+4. **Prioridad**: Calcula nivel automáticamente (baja/media/alta/crítica)
+5. **Contacto**: Ofrece datos de contacto colaborativo
+6. **Registro**: Crea emergencia en base de datos
+
+## 🔑 Datos Recolectados
+
+- X1: Sector (7 sectores disponibles)
+- X2: Datos del medidor/fuga
+- X3: Fecha
+- X4: Nombre del usuario
+- X5: Fotografía (opcional)
+- X6: Dirección
+- X7: Teléfono
+
+## 📊 Niveles de Prioridad
+
+- 🟢 **BAJA**: Consultas generales, problemas menores
+- 🟡 **MEDIA**: Fugas moderadas, baja presión localizada
+- 🟠 **ALTA**: Agua contaminada, cañería rota importante
+- 🔴 **CRÍTICA**: Rotura de matriz, sin agua en sector
+
+## 👥 Sectores Atendidos
+
+1. Anibana
+2. El Molino
+3. La Compañía
+4. El Maitén 1
+5. La Morera
+6. El Maitén 2
+7. Santa Margarita
+
+## 📞 Contactos de la Cooperativa
+
+- **Emergencias**: +56 9 5403 8948 (24/7)
+- **Recaudación**: +56 9 8149 4350
+- **Gerencia**: +56 9 7846 7011
+- **Correo**: laciacoop@gmail.com
+
+## 🔧 Desarrollo
+
+### Ejecutar Tests
+```bash
+python manage.py test ModuloEmergencia
+```
+
+### Limpiar Base de Datos
+```bash
+python manage.py flush
+```
+
+### Reiniciar ChromaDB
+```bash
+# Eliminar carpeta chroma_db y volver a ingestar
+rm -rf chroma_db
+python manage.py shell < ModuloEmergencia/RAG/ingest_documents.py
+```
+
+## 🚢 Despliegue
+
+Ver [Documentacion-Emergencia.md](Doc/Documentacion-Emergencia.md) sección "Despliegue" para:
+- Configuración con PostgreSQL
+- Docker & Docker Compose
+- Configuración de producción
+- Consideraciones de seguridad
+
+## 🤝 Contribuir
+
+1. Fork el proyecto
+2. Crear rama feature (`git checkout -b feature/NuevaCaracteristica`)
+3. Commit cambios (`git commit -m 'Agregar nueva característica'`)
+4. Push a la rama (`git push origin feature/NuevaCaracteristica`)
+5. Abrir Pull Request
+
+## 📝 Notas
+
+- Este proyecto fue desarrollado para la Cooperativa de Agua Potable Rural
+- Fundada en 1968 con 58 años de historia
+- Sistema comunitario sin fines de lucro
+- 20 km de red de agua potable
+
+## 📄 Licencia
+
+Proyecto desarrollado para fines educativos y comunitarios.
+
+## 🆘 Soporte
+
+- **Issues**: https://github.com/DaniBOD/Chatbot-Backend/issues
+- **Email**: laciacoop@gmail.com
+- **Documentación**: [Doc/Documentacion-Emergencia.md](Doc/Documentacion-Emergencia.md)
+
+---
+
+**Última actualización**: 5 de diciembre de 2025
+**Versión**: 1.0.0
+**Estado**: ✅ Módulo de Emergencias - Completo | 🔜 Módulo de Boletas - En desarrollo
