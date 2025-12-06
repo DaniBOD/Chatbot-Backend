@@ -50,3 +50,6 @@ staticfiles/
 # OS
 .DS_Store
 Thumbs.db
+
+# ChromaDB - Vector database files (regenerable)
+chroma_db/
