@@ -9,7 +9,7 @@ import logging
 from django.conf import settings
 
 # Document loaders
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import (
     TextLoader,
     PyPDFLoader,

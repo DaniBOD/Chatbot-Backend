@@ -48,7 +48,9 @@ class ChatbotService:
             logger.warning("GEMINI_API_KEY no configurada")
         
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-pro')
+        # Usar Gemini 2.5 Flash desde configuración
+        gemini_model = getattr(settings, 'RAG_CONFIG', {}).get('gemini_model', 'gemini-2.5-flash')
+        self.model = genai.GenerativeModel(gemini_model)
         
         # Inicializar RAG
         self.rag_retriever = get_rag_retriever()

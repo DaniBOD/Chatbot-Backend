@@ -177,4 +177,5 @@ RAG_CONFIG = {
     'chunk_overlap': 200,
     'top_k_results': 5,
     'embedding_model': 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',
+    'gemini_model': 'gemini-2.5-flash',  # Modelo Gemini 2.5 Flash
 }
