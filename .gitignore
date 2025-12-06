@@ -50,6 +50,3 @@ staticfiles/
 # OS
 .DS_Store
 Thumbs.db
-
-# ChromaDB vector store
-chroma_db/
