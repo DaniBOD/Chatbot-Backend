@@ -1,12 +1,146 @@
-# 📊 Reporte de Cobertura de Tests - Módulo Emergencias
+# 📋 Reporte de Cobertura de Tests - Sistema Completo
 
-**Fecha**: 5 de Diciembre, 2025  
-**Proyecto**: Chatbot Backend - Módulo de Emergencias  
+**Fecha**: 6 de Diciembre, 2025  
+**Proyecto**: Chatbot Backend - Módulos Emergencias + Boletas  
 **Framework**: Django 5.2.8 + DRF 3.16.1  
 
 ---
 
-## 🎯 Resumen Ejecutivo
+## 🎯 Resumen Ejecutivo Global
+
+### Módulo Emergencias
+- **Tests Ejecutados**: 25 tests
+- **Tests Exitosos**: 7 ✅
+- **Tests con Errores**: 11 ⚠️
+- **Tests Fallidos**: 7 ❌
+- **Cobertura**: 58% (925 líneas, 392 sin cubrir)
+- **Estado**: En desarrollo, requiere refactorización
+
+### Módulo Boletas
+- **Tests Ejecutados**: 35 tests
+- **Tests Exitosos**: 35 ✅
+- **Tests con Errores**: 0 ⚠️
+- **Tests Fallidos**: 0 ❌
+- **Cobertura**: 61% (1362 líneas, 530 sin cubrir)
+- **Estado**: ✅ FUNCIONAL - Tests pasando, cobertura mejorable
+
+### Total del Proyecto
+- **Tests Totales**: 60 tests
+- **Tests Exitosos**: 42 (70%)
+- **Líneas de código**: 2287 líneas
+- **Líneas cubiertas**: 1365 líneas
+- **Cobertura Global**: ~60%
+
+---
+
+## 📊 Módulo Boletas - Cobertura Completa
+
+### Resumen de Tests (35 tests - TODOS PASANDO ✅)
+
+#### 1. BoletaModelTests (10 tests)
+```python
+test_crear_boleta_valida                    ✅
+test_rut_valido                              ✅
+test_rut_invalido_formato                    ✅
+test_rut_invalido_digito_verificador         ✅
+test_unique_together_constraint              ✅
+test_str_representation                      ✅
+test_campos_opcionales                       ✅
+test_monto_negativo                          ✅
+test_consumo_negativo                        ✅
+test_periodo_formato_valido                  ✅
+```
+
+#### 2. ChatConversationModelTests (3 tests)
+```python
+test_crear_conversacion                      ✅
+test_str_representation                      ✅
+test_timestamps_auto                         ✅
+```
+
+#### 3. ChatMessageModelTests (4 tests)
+```python
+test_crear_mensaje                           ✅
+test_str_representation                      ✅
+test_mensaje_ordering                        ✅
+test_mensaje_largo                           ✅
+```
+
+#### 4. ChatbotServiceTests (3 tests)
+```python
+test_init_chatbot_service                    ✅
+test_handle_message_inicio                   ✅
+test_handle_message_con_contexto             ✅
+```
+
+#### 5. ChatAPITests (7 tests)
+```python
+test_chat_init_success                       ✅
+test_chat_message_success                    ✅
+test_chat_status_success                     ✅
+test_chat_history_success                    ✅
+test_chat_message_invalid_session            ✅
+test_chat_message_sin_contenido              ✅
+test_chat_status_invalid_session             ✅
+```
+
+#### 6. BoletaViewSetTests (6 tests)
+```python
+test_list_boletas                            ✅
+test_retrieve_boleta                         ✅
+test_create_boleta                           ✅
+test_update_boleta                           ✅
+test_delete_boleta                           ✅
+test_consultar_action                        ✅
+```
+
+#### 7. IntegrationTests (2 tests)
+```python
+test_flujo_completo_conversacion             ✅
+test_consulta_boleta_no_existe               ✅
+```
+
+### Cobertura por Componente (Módulo Boletas)
+
+| Componente | Cobertura Real | Líneas | Sin Cubrir | Estado |
+|------------|----------------|---------|------------|--------|
+| `tests.py` | **99%** | 275 | 1 | ✅ Excelente |
+| `__init__.py` | **100%** | 5 | 0 | ✅ Excelente |
+| `apps.py` | **100%** | 5 | 0 | ✅ Excelente |
+| `urls.py` | **100%** | 7 | 0 | ✅ Excelente |
+| `models.py` | **89%** | 83 | 9 | ✅ Muy Bueno |
+| `serializers.py` | **89%** | 75 | 8 | ✅ Muy Bueno |
+| `retriever.py` | **63%** | 82 | 30 | ⚠️ Mejorable |
+| `admin.py` | **58%** | 137 | 58 | ⚠️ Mejorable |
+| `vector_store.py` | **57%** | 63 | 27 | ⚠️ Mejorable |
+| `views.py` | **55%** | 189 | 85 | ⚠️ Mejorable |
+| `chatbot_service.py` | **44%** | 237 | 133 | ⚠️ Crítico |
+| `embeddings.py` | **31%** | 80 | 55 | ❌ Crítico |
+| `ingest_documents.py` | **0%** | 67 | 67 | ❌ Sin tests |
+| `ingest_knowledge_base.py` | **0%** | 57 | 57 | ❌ Sin tests |
+
+**Cobertura Total: 61% (1362 líneas, 530 sin cubrir)**
+
+**Análisis**: ModuloBoletas tiene **61% de cobertura real** medida con Coverage.py. Los 35 tests cubren:
+- ✅ CRUD completo de boletas
+- ✅ Validaciones de RUT chileno (89% de models.py)
+- ✅ Flujo conversacional básico
+- ✅ API REST endpoints principales
+- ✅ Sistema de chat (init, message, status, history)
+- ✅ Manejo de errores y casos edge
+- ✅ Integración end-to-end
+
+**Áreas sin cobertura:**
+- ❌ Management commands (0%)
+- ❌ Scripts de ingesta RAG (0%)
+- ⚠️ Lógica compleja del chatbot (44%)
+- ⚠️ Acciones custom del admin (58%)
+- ⚠️ Sistema RAG completo (31-63%)
+- ⚠️ Endpoints avanzados de views (55%)
+
+---
+
+## 📋 Módulo Emergencias - Cobertura Detallada
 
 ### Cobertura Global del Módulo
 - **Cobertura Total**: **58%** (925 líneas, 392 sin cubrir)
@@ -294,6 +428,7 @@ response, estado, datos = service.process_message(...)  # ✅ CORRECTO
 
 ## 📊 Métricas Actuales vs Objetivos
 
+### Módulo Emergencias
 | Métrica | Actual | Objetivo Corto | Objetivo Largo |
 |---------|--------|----------------|----------------|
 | **Cobertura Total** | 58% | 70% | 90% |
@@ -301,6 +436,25 @@ response, estado, datos = service.process_message(...)  # ✅ CORRECTO
 | **Sistema RAG** | 32-42% | 70% | 85% |
 | **Views** | 58% | 75% | 90% |
 | **Models** | 90% | 95% | 98% |
+
+### Módulo Boletas
+| Métrica | Actual | Objetivo Corto | Objetivo Largo |
+|---------|--------|----------------|----------------|
+| **Cobertura Total** | **61%** | 75% | 90% |
+| **Chatbot Service** | **44%** | 70% | 90% |
+| **Sistema RAG** | **31-63%** | 70% | 85% |
+| **Views** | **55%** | 75% | 90% |
+| **Admin** | **58%** | 75% | 90% |
+| **Models** | **89%** | 95% | 98% |
+| **Serializers** | **89%** | 95% | 98% |
+| **Management Cmds** | **0%** | 70% | 85% |
+
+### Proyecto Global
+| Métrica | Actual | Objetivo |
+|---------|--------|----------|
+| **Cobertura Global** | **60%** | 80% |
+| **Tests Pasando** | **70% (42/60)** | 95% |
+| **Líneas Cubiertas** | **1365/2287** | 1830/2287 |
 
 ---
 
@@ -325,6 +479,7 @@ response, estado, datos = service.process_message(...)  # ✅ CORRECTO
 
 ## 🔗 Comandos Útiles
 
+### Módulo Emergencias
 ```bash
 # Ejecutar todos los tests
 python manage.py test ModuloEmergencia
@@ -345,30 +500,101 @@ python manage.py test ModuloEmergencia.tests.ChatbotServiceTests.test_start_conv
 python manage.py test ModuloEmergencia --verbosity=2
 ```
 
+### Módulo Boletas
+```bash
+# Ejecutar todos los tests (35 tests)
+python manage.py test ModuloBoletas
+
+# Ejecutar con cobertura
+python -m coverage run --source=ModuloBoletas manage.py test ModuloBoletas
+
+# Ver reporte en terminal
+python -m coverage report -m
+
+# Ejecutar categoría específica
+python manage.py test ModuloBoletas.tests.BoletaModelTests
+python manage.py test ModuloBoletas.tests.ChatAPITests
+
+# Ver tests con más detalle
+python manage.py test ModuloBoletas --verbosity=2
+```
+
+### Ambos Módulos
+```bash
+# Ejecutar todos los tests del proyecto (60 tests)
+python manage.py test
+
+# Ejecutar con cobertura completa
+python -m coverage run --source='.' manage.py test
+python -m coverage report -m
+python -m coverage html
+```
+
 ---
 
 ## 🎓 Conclusiones
 
 ### Fortalezas ✅
-1. Arquitectura base bien testeada (admin, serializers, models)
-2. Tests estructurados con buena organización
-3. Uso de mocks para dependencias externas
-4. Cobertura del 90% en models
+1. **35/35 tests de ModuloBoletas pasando** - Funcionalidad básica sólida
+2. Arquitectura base bien testeada (admin, serializers, models) en ambos módulos
+3. Tests estructurados con buena organización
+4. Uso de mocks para dependencias externas
+5. Cobertura del 90% en models de Emergencias
+6. Cobertura del 89% en models y serializers de Boletas
+7. Validación de RUT chileno testeada exhaustivamente
 
-### Debilidades ⚠️
+### Debilidades ⚠️ (Ambos Módulos)
+
+**ModuloEmergencia:**
 1. **Chatbot service con solo 43% de cobertura** (componente crítico)
 2. **Sistema RAG pobremente testeado** (32-42%)
 3. **Script de ingesta sin tests** (0%)
 4. 11 tests con errores de implementación
 5. Falta de tests de integración E2E
 
+**ModuloBoletas:**
+1. **Chatbot service con solo 44% de cobertura** (componente crítico)
+2. **Management commands sin tests** (0%)
+3. **Sistema RAG parcialmente testeado** (31-63%)
+4. **Views con 55% de cobertura** (endpoints custom sin tests)
+5. **Admin con 58% de cobertura** (acciones personalizadas sin tests)
+6. **Embeddings con solo 31%** (procesamiento de documentos sin tests)
+
+### Estado por Módulo
+
+**ModuloBoletas**: ⚠️ **FUNCIONAL PERO MEJORABLE**
+- 35/35 tests pasando (100%)
+- **Cobertura real: 61%** (medido con Coverage.py)
+- Funcionalidad básica sólida y testeada
+- Sistema RAG funcional pero poco testeado
+- Management commands y lógica compleja sin cobertura
+- **Recomendación**: Agregar tests para chatbot service, RAG, y management commands antes de producción
+
+**ModuloEmergencia**: ❌ **REQUIERE TRABAJO URGENTE**
+- 7/25 tests pasando (28%)
+- Cobertura: 58%
+- Necesita refactorización completa de tests
+- Sistema RAG requiere más cobertura
+- **Recomendación**: Corregir tests existentes primero, luego aumentar cobertura
+
 ### Recomendación Final 🎯
 
-**Priorizar el testing del chatbot service y sistema RAG antes de desplegar a producción.** Estos componentes son el corazón del sistema y actualmente tienen cobertura insuficiente, lo que representa un riesgo alto de bugs en producción.
+**ModuloBoletas puede usarse en producción con precaución**, pero se recomienda:
+1. Agregar tests para `chatbot_service.py` (actualmente 44%)
+2. Testear management commands de ingesta (actualmente 0%)
+3. Aumentar cobertura de sistema RAG (31-63% actual)
+4. Testear endpoints avanzados y acciones de admin
 
-La cobertura actual del 58% es **aceptable para un prototipo**, pero **insuficiente para producción**. Se recomienda alcanzar al menos 80% antes de lanzamiento.
+**Target recomendado antes de producción: 75-80% de cobertura**
+
+**ModuloEmergencia NO está listo para producción**. Requiere:
+1. Corregir 18 tests fallidos/con errores
+2. Aumentar cobertura de chatbot service y RAG
+3. Agregar tests de integración E2E
+
+La cobertura global del **60%** es **aceptable para desarrollo activo**, pero ambos módulos necesitan trabajo adicional antes de considerarse listos para producción.
 
 ---
 
 **Generado automáticamente por Coverage.py**  
-**Fecha**: 5 de Diciembre, 2025
+**Fecha**: 6 de Diciembre, 2025

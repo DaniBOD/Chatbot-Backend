@@ -111,20 +111,44 @@ python manage.py migrate
 
 ### 6️⃣ Ingestar Documentos al Sistema RAG
 
+Cada módulo requiere su propio comando de ingesta:
+
+#### A. Ingestar Módulo Emergencias
 ```bash
 python manage.py shell < ModuloEmergencia/RAG/ingest_documents.py
 ```
 
-**Deberías ver algo como:**
+**Deberías ver:**
 ```
 === Iniciando ingesta de documentos ===
-Procesando documentos de: ...
-Total de chunks procesados: 127
+Procesando documentos...
 ✅ Documentos ingresados exitosamente
-📊 Total de documentos en colección: 127
+📊 Total de documentos en colección: ~127
 ```
 
-**Si ves esto, ¡perfecto! El RAG está listo.**
+#### B. Ingestar Módulo Boletas
+```bash
+python manage.py ingest_knowledge_base
+```
+
+**Deberías ver:**
+```
+🚀 Iniciando ingesta de documentos...
+
+✅ Ingesta completada exitosamente!
+  📁 Archivos procesados: 3
+  📄 Chunks generados: 13
+  💾 Documentos agregados: 13
+```
+
+**Opciones adicionales (solo Boletas):**
+```bash
+python manage.py ingest_knowledge_base --reset     # Resetear y reingestar
+python manage.py ingest_knowledge_base --stats     # Ver estadísticas
+python manage.py ingest_knowledge_base --verbose   # Output detallado
+```
+
+**Si ambas ingestas fueron exitosas, ¡perfecto! El RAG está listo para ambos módulos.**
 
 ---
 

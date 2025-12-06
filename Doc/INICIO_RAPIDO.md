@@ -1,4 +1,11 @@
-# 🚀 Guía Rápida de Inicio - Chatbot de Emergencias
+# 🚀 Guía Rápida de Inicio - Chatbot Cooperativa de Agua Potable
+
+## 📦 Módulos Disponibles
+
+- **ModuloEmergencia**: Reportar emergencias de servicio de agua
+- **ModuloBoletas**: Consultar información de boletas de consumo
+
+---
 
 ## ✅ Pasos para Iniciar el Proyecto
 
@@ -26,14 +33,41 @@ python manage.py migrate
 
 ### 4. Ingestar Documentos al RAG
 
+Cada módulo tiene su propio proceso de ingesta:
+
+#### Módulo Emergencias
 ```bash
 python manage.py shell < ModuloEmergencia/RAG/ingest_documents.py
 ```
 
 Deberías ver:
 ```
+=== Iniciando ingesta de documentos ===
+Procesando documentos...
 ✅ Documentos ingresados exitosamente
-📊 Total de documentos en colección: 127
+📊 Total de documentos en colección: ~127
+```
+
+#### Módulo Boletas
+```bash
+python manage.py ingest_knowledge_base
+```
+
+Deberías ver:
+```
+🚀 Iniciando ingesta de documentos...
+
+✅ Ingesta completada exitosamente!
+  📁 Archivos procesados: 3
+  📄 Chunks generados: 13
+  💾 Documentos agregados: 13
+```
+
+**Opciones adicionales (solo Boletas):**
+```bash
+python manage.py ingest_knowledge_base --reset     # Resetear y reingestar
+python manage.py ingest_knowledge_base --stats     # Ver estadísticas
+python manage.py ingest_knowledge_base --verbose   # Output detallado
 ```
 
 ### 5. Crear Superusuario (Opcional)
@@ -102,6 +136,7 @@ print("Bot:", response.json()['message'])
 
 ## 📍 Endpoints Principales
 
+### Módulo de Emergencias
 - **Chat:**
   - `POST /api/emergencias/chat/init/` - Iniciar conversación
   - `POST /api/emergencias/chat/message/` - Enviar mensaje
@@ -115,11 +150,26 @@ print("Bot:", response.json()['message'])
 - **RAG:**
   - `GET /api/emergencias/rag/stats/` - Estadísticas del sistema RAG
 
+### Módulo de Boletas
+- **Chat:**
+  - `POST /api/boletas/chat/init/` - Iniciar conversación
+  - `POST /api/boletas/chat/message/` - Enviar mensaje
+  - `GET /api/boletas/chat/status/{session_id}/` - Ver estado
+
+- **Boletas:**
+  - `GET /api/boletas/boletas/` - Listar boletas (con filtros)
+  - `GET /api/boletas/boletas/{id}/` - Ver detalle
+  - `POST /api/boletas/boletas/consultar/` - Consultar con múltiples criterios
+
+- **RAG:**
+  - `GET /api/boletas/rag/stats/` - Estadísticas del sistema RAG
+
 ---
 
 ## 📚 Documentación Completa
 
-Ver: `Backend/Doc/Documentacion-Emergencia.md`
+- **Módulo Emergencias**: `Doc/Documentacion-Emergencia.md`
+- **Módulo Boletas**: `Doc/Documentacion-Boletas.md`
 
 ---
 
@@ -136,6 +186,7 @@ Ver: `Backend/Doc/Documentacion-Emergencia.md`
 
 ### RAG sin documentos
 - Ejecuta ingesta: `python manage.py shell < ModuloEmergencia/RAG/ingest_documents.py`
+- Ejecuta ingesta: `python manage.py ingest_knowledge_base`
 
 ---
 

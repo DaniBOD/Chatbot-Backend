@@ -1,11 +1,11 @@
-# Contexto del Proyecto: Chatbot Backend - Módulo de Emergencias
+# Contexto del Proyecto: Chatbot Backend - Sistema Completo
 
 ## 🎯 Visión General del Proyecto
 
 **Proyecto**: Sistema de Chatbot Inteligente para Cooperativa de Agua Potable  
-**Módulo**: Emergencias (Backend)  
-**Propósito**: Automatizar el reporte y gestión de emergencias relacionadas con el servicio de agua mediante un chatbot conversacional con RAG  
-**Estado**: Prototipo funcional (4 desarrolladores: 2 backend, 2 frontend)  
+**Módulos**: Emergencias + Boletas (2 módulos completos)  
+**Propósito**: Automatizar el reporte de emergencias y consultas de boletas mediante chatbots conversacionales con RAG  
+**Estado**: Ambos módulos funcionales (4 desarrolladores: 2 backend, 2 frontend)  
 **Tecnología Principal**: Django 5.2.8 + Google Gemini 2.5 Flash + ChromaDB + LangChain
 
 ---
@@ -21,13 +21,19 @@
 
 **Inteligencia Artificial**
 - Google Gemini 2.5 Flash - Modelo LLM para procesamiento de lenguaje natural
-- LangChain 0.3.13 - Framework para aplicaciones LLM
-- Sentence Transformers 3.3.1 - Embeddings multilingües
+- LangChain: ModuloEmergencia 0.3.13, ModuloBoletas 0.3.27 - Framework para aplicaciones LLM
+- langchain-google-genai 2.0.10 - Integración oficial de Gemini
+- langchain-community: ModuloEmergencia 0.3.13, ModuloBoletas 0.3.31 - Integraciones adicionales
+- Sentence Transformers: ModuloEmergencia 3.3.1, ModuloBoletas 5.1.2 - Embeddings multilingües
+- PyTorch 2.9.1 - Backend para sentence-transformers
+- NumPy 2.3.5 - Computación numérica
 
 **Sistema RAG (Retrieval-Augmented Generation)**
-- ChromaDB 0.5.23 - Base de datos vectorial para búsqueda semántica
+- ChromaDB: ModuloEmergencia 0.5.23, ModuloBoletas 1.3.5 (precompilada) - Base de datos vectorial
+- Unstructured 0.18.21 - Carga universal de documentos (usado en ModuloBoletas)
 - Embeddings: paraphrase-multilingual-MiniLM-L12-v2
 - Documents: Markdown files con información de la cooperativa
+- Colecciones: emergencias_knowledge_base (127 docs), boletas_knowledge_base (13 docs)
 
 **Base de Datos**
 - SQLite (desarrollo/prototipo)
@@ -78,11 +84,34 @@ Backend/
 │           ├── contactos_cooperativa.md
 │           └── faq_preguntas_frecuentes.md
 │
-├── ModuloBoletas/               # Módulo adicional (pendiente)
-│   └── __init__.py
+├── ModuloBoletas/               # 💳 Módulo de Boletas - ✅ COMPLETO
+│   ├── models.py                # 3 modelos: Boleta, ChatConversation, ChatMessage
+│   ├── views.py                 # ViewSets y endpoints de chat
+│   ├── serializers.py           # 10 serializers DRF
+│   ├── urls.py                  # URLs del módulo
+│   ├── admin.py                 # Admin panel
+│   ├── tests.py                 # Tests unitarios (35 tests - 100% pasando)
+│   │
+│   ├── services/                # Lógica de negocio
+│   │   └── chatbot_service.py   # ~760 líneas - Lógica conversacional
+│   │
+│   ├── RAG/                     # Sistema RAG
+│   │   ├── vector_store.py      # Gestión de ChromaDB 1.3.5
+│   │   ├── embeddings.py        # Procesamiento de documentos
+│   │   ├── retriever.py         # Búsqueda vectorial
+│   │   ├── ingest_documents.py  # Document processor
+│   │   └── knowledge_base/      # Base de conocimiento (3 docs .md)
+│   │       ├── guia_boletas.md
+│   │       ├── tarifas.md
+│   │       └── preguntas_frecuentes.md
+│   │
+│   └── management/              # Django management commands
+│       └── commands/
+│           └── ingest_knowledge_base.py  # Comando de ingesta
 │
 ├── Doc/                         # Documentación
 │   ├── Documentacion-Emergencia.md  # 929 líneas - Doc técnica completa
+│   ├── Documentacion-Boletas.md     # 929 líneas - Doc técnica completa
 │   └── Project.context.md           # Este archivo
 │
 ├── Tests/                       # Tests adicionales organizados
@@ -396,11 +425,95 @@ Bot: [Busca en RAG: contactos_cooperativa.md]
 - ⬜ Documentación de API (Swagger/OpenAPI)
 
 ### Largo Plazo (Este mes)
-- ⬜ Módulo de Boletas (segundo chatbot)
+- ✅ Módulo de Boletas (segundo chatbot)
 - ⬜ Sistema de notificaciones
 - ⬜ Métricas y analytics
 - ⬜ Deploy en servidor
 - ⬜ CI/CD pipeline
+
+---
+
+## 💳 Módulo de Boletas - Detalles Técnicos
+
+### Propósito
+Chatbot conversacional para consultas sobre boletas de consumo de agua, incluyendo validación de RUT chileno, consultas comparativas entre períodos, y acceso a información de tarifas.
+
+### Flujo Conversacional
+
+El chatbot sigue este flujo:
+
+1. **Inicio** → Saludo y solicitud de motivo de consulta
+2. **¿Cliente tiene boleta en sistema?**
+   - **NO** → Solicitar imagen de boleta → Fin
+   - **SÍ** → Rescatar datos de boleta (7 campos)
+3. **Enviar respuesta** con datos de la boleta
+4. **¿Consulta comparativa?**
+   - **SÍ** → Comparar con período anterior
+   - **NO** → Fin
+
+### Datos de Boleta
+
+| Campo | Descripción | Tipo |
+|-------|-------------|------|
+| id_boleta | ID único | Integer |
+| fecha_emision | Fecha de emisión | Date |
+| nombre | Nombre del cliente | String |
+| rut | RUT chileno (validado) | String |
+| direccion | Dirección del servicio | String |
+| monto | Monto a pagar | Decimal |
+| consumo | Consumo en m³ | Decimal |
+| periodo | Período de facturación | String |
+
+### Sistema RAG
+
+**Base de Conocimiento (3 documentos):**
+- `guia_boletas.md` - Guía completa sobre boletas
+- `tarifas.md` - Información de tarifas y cálculos
+- `preguntas_frecuentes.md` - FAQ sobre boletas
+
+**Estadísticas:**
+- Colección: `boletas_knowledge_base`
+- Documentos ingested: 13 chunks
+- ChromaDB version: 1.3.5 (precompilada)
+
+### API REST Endpoints
+
+**Chat:**
+- `POST /api/boletas/chat/init/` - Iniciar conversación
+- `POST /api/boletas/chat/message/` - Enviar mensaje
+- `GET /api/boletas/chat/status/{session_id}/` - Estado
+- `GET /api/boletas/chat/history/{session_id}/` - Historial
+
+**Boletas:**
+- `GET /api/boletas/boletas/` - Listar (con filtros: rut, periodo, fecha_desde, fecha_hasta)
+- `GET /api/boletas/boletas/{id}/` - Detalle
+- `POST /api/boletas/boletas/` - Crear
+- `PUT /api/boletas/boletas/{id}/` - Actualizar
+- `DELETE /api/boletas/boletas/{id}/` - Eliminar
+- `POST /api/boletas/boletas/consultar/` - Consulta con múltiples criterios
+
+**RAG:**
+- `GET /api/boletas/rag/stats/` - Estadísticas del sistema RAG
+
+### Tests (35 tests - 100% pasando ✅)
+
+| Categoría | Tests | Estado |
+|-----------|-------|--------|
+| BoletaModelTests | 10 | ✅ |
+| ChatConversationModelTests | 3 | ✅ |
+| ChatMessageModelTests | 4 | ✅ |
+| ChatbotServiceTests | 3 | ✅ |
+| ChatAPITests | 7 | ✅ |
+| BoletaViewSetTests | 6 | ✅ |
+| IntegrationTests | 2 | ✅ |
+
+### Características Especiales
+
+1. **Validación de RUT Chileno**: Verifica dígito verificador
+2. **Consultas Comparativas**: Compara consumo/monto entre períodos
+3. **Constraint Único**: (rut, periodo) para evitar duplicados
+4. **Management Command**: `python manage.py ingest_knowledge_base` con opciones --reset, --stats, --verbose
+5. **Admin Avanzado**: Filtros por RUT, período, rangos de monto/consumo
 
 ---
 
