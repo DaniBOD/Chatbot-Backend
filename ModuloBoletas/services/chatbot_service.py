@@ -223,8 +223,21 @@ class ChatbotService:
             }
         
         if 'rut' not in datos:
+            # Mensaje más amigable dependiendo del motivo
+            motivo = datos.get('motivo_consulta', '')
+            if 'compar' in motivo:
+                mensaje_rut = '¡Perfecto! Para comparar tus boletas, necesito tu RUT. Por favor indícamelo (formato: 12345678-9)'
+            elif 'monto' in motivo or 'pagar' in motivo:
+                mensaje_rut = 'Entendido, para consultar el monto a pagar necesito tu RUT. Por favor indícamelo (formato: 12345678-9)'
+            elif 'consumo' in motivo:
+                mensaje_rut = 'Claro, para revisar tu consumo necesito tu RUT. Por favor indícamelo (formato: 12345678-9)'
+            elif 'estado' in motivo:
+                mensaje_rut = 'De acuerdo, para verificar el estado necesito tu RUT. Por favor indícamelo (formato: 12345678-9)'
+            else:
+                mensaje_rut = '¡Perfecto! Para ayudarte, necesito tu RUT. Por favor indícamelo (formato: 12345678-9)'
+            
             return {
-                'message': 'Por favor, indícame tu RUT para buscar tu información. (Formato: 12345678-9)',
+                'message': mensaje_rut,
                 'estado': conversation.estado,
                 'completed': False
             }
@@ -409,7 +422,7 @@ class ChatbotService:
         conversation: ChatConversation
     ) -> Dict[str, Any]:
         """
-        Extrae información del mensaje usando Gemini
+        Extrae información del mensaje usando Gemini (primario) con fallback a regex
         
         Args:
             user_message: Mensaje del usuario
@@ -419,50 +432,181 @@ class ChatbotService:
         Returns:
             Dict con los datos extraídos
         """
-        # Obtener historial reciente
-        history = self._get_conversation_history(conversation, last_n=3)
+        extracted_data = {}
         
-        # Obtener contexto del RAG si está disponible
-        rag_context = ""
-        if self.rag_retriever:
-            try:
-                rag_context = self.rag_retriever.get_relevant_context_text(
-                    query=user_message,
-                    max_length=1500
-                )
-            except Exception as e:
-                logger.warning(f"Error obteniendo contexto RAG: {e}")
-        
-        # Construir prompt
-        prompt = self._build_extraction_prompt(
-            user_message,
-            current_data,
-            history,
-            rag_context
-        )
+        # MÉTODO PRIMARIO: Extracción con LLM (Gemini)
+        logger.info("🤖 Intentando extracción con Gemini API...")
         
         try:
-            # Llamar a Gemini
-            response = self.model.generate_content(prompt)
+            # Obtener historial reciente
+            history = self._get_conversation_history(conversation, last_n=3)
+            
+            # Obtener contexto del RAG si está disponible
+            rag_context = ""
+            if self.rag_retriever:
+                try:
+                    rag_context = self.rag_retriever.get_relevant_context_text(
+                        query=user_message,
+                        max_length=1000
+                    )
+                except Exception as e:
+                    logger.warning(f"Error obteniendo contexto RAG: {e}")
+            
+            # Construir prompt
+            prompt = self._build_extraction_prompt(
+                user_message,
+                current_data,
+                history,
+                rag_context
+            )
+            
+            # Llamar a Gemini con timeout
+            response = self.model.generate_content(
+                prompt,
+                generation_config={
+                    'temperature': 0.1,
+                    'max_output_tokens': 200
+                }
+            )
             
             # Parsear respuesta JSON
-            # Limpiar markdown si existe
             response_text = response.text.strip()
             if response_text.startswith('```'):
                 # Extraer JSON del bloque de código
-                response_text = re.sub(r'```json\\s*|\\s*```', '', response_text).strip()
+                response_text = re.sub(r'```json\s*|\s*```', '', response_text).strip()
             
             # Parsear JSON
-            extracted_data = json.loads(response_text)
-            logger.info(f"Datos extraídos: {extracted_data}")
-            return extracted_data
+            llm_data = json.loads(response_text)
+            
+            # Usar datos del LLM como primarios
+            extracted_data.update(llm_data)
+            logger.info(f"✅ Datos extraídos con Gemini API: {llm_data}")
+            
+            # Si tenemos datos completos, retornar
+            if 'rut' in extracted_data or 'motivo_consulta' in extracted_data:
+                return extracted_data
             
         except json.JSONDecodeError as e:
-            logger.warning(f"Respuesta de LLM no es JSON válido: {e}")
-            return {}
+            logger.warning(f"⚠️  Respuesta de Gemini no es JSON válido: {e}")
+            logger.warning(f"Respuesta recibida: {response_text[:200] if 'response_text' in locals() else 'N/A'}")
         except Exception as e:
-            logger.error(f"Error en extracción con LLM: {e}")
-            return {}
+            logger.error(f"❌ Error en extracción con Gemini API: {e}")
+        
+        # FALLBACK: Extracción por regex si Gemini falla o no retorna datos completos
+        logger.info("🔄 Usando regex como fallback...")
+        regex_data = self._extract_data_with_regex(user_message, current_data)
+        
+        # Combinar datos (LLM tiene prioridad si existe, sino usar regex)
+        for key, value in regex_data.items():
+            if key not in extracted_data:
+                extracted_data[key] = value
+        
+        if regex_data:
+            logger.info(f"✅ Datos extraídos con regex (fallback): {regex_data}")
+        
+        # Si aún no tenemos datos, intentar extracción simple basada en keywords
+        if not extracted_data.get('motivo_consulta'):
+            motivo_simple = self._extract_simple_intent(user_message)
+            if motivo_simple:
+                extracted_data['motivo_consulta'] = motivo_simple
+                logger.info(f"✅ Motivo extraído con análisis simple: {motivo_simple}")
+        
+        return extracted_data
+    
+    def _extract_data_with_regex(
+        self,
+        user_message: str,
+        current_data: Dict
+    ) -> Dict[str, Any]:
+        """
+        Extrae datos usando expresiones regulares (fallback confiable)
+        
+        Args:
+            user_message: Mensaje del usuario
+            current_data: Datos ya recolectados
+            
+        Returns:
+            Dict con datos extraídos
+        """
+        extracted = {}
+        message_lower = user_message.lower()
+        
+        # Extraer RUT con regex
+        rut_pattern = r'\b(\d{7,8}[-\.]?\d)\b'
+        rut_match = re.search(rut_pattern, user_message)
+        if rut_match:
+            rut = rut_match.group(1)
+            # Normalizar formato (agregar guión si no lo tiene)
+            if '-' not in rut and '.' not in rut:
+                rut = f"{rut[:-1]}-{rut[-1]}"
+            else:
+                rut = rut.replace('.', '-')
+            extracted['rut'] = rut
+            logger.info(f"RUT extraído por regex: {rut}")
+        
+        # Extraer motivo de consulta por palabras clave
+        motivos_keywords = {
+            'consultar_monto': ['monto', 'pagar', 'pago', 'cuanto', 'cuánto', 'debo', 'valor', 'precio'],
+            'consultar_consumo': ['consumo', 'gasto', 'metros', 'm3', 'm³', 'cuanto gaste', 'cuánto gaste'],
+            'comparar_periodos': ['comparar', 'comparación', 'diferencia', 'meses', 'períodos', 'periodos'],
+            'ver_boleta': ['ver', 'mostrar', 'boleta', 'factura', 'estado'],
+            'estado_pago': ['estado', 'pagada', 'pendiente', 'vencida', 'pague', 'pagué']
+        }
+        
+        # Buscar coincidencias
+        max_matches = 0
+        best_motivo = None
+        
+        for motivo, keywords in motivos_keywords.items():
+            matches = sum(1 for keyword in keywords if keyword in message_lower)
+            if matches > max_matches:
+                max_matches = matches
+                best_motivo = motivo
+        
+        if best_motivo:
+            extracted['motivo_consulta'] = best_motivo
+            logger.info(f"Motivo extraído por regex: {best_motivo}")
+        
+        # Detectar intención comparativa
+        if any(word in message_lower for word in ['compar', 'diferen', 'meses', 'period']):
+            extracted['quiere_comparar'] = True
+        
+        return extracted
+    
+    def _extract_simple_intent(self, user_message: str) -> Optional[str]:
+        """
+        Extrae intención simple cuando regex y LLM fallan
+        Método ultra-simple basado en palabras clave principales
+        
+        Args:
+            user_message: Mensaje del usuario
+            
+        Returns:
+            Motivo de consulta o None
+        """
+        message_lower = user_message.lower()
+        
+        # Palabras clave prioritarias (más específicas primero)
+        if any(word in message_lower for word in ['comparar', 'comparación', 'diferencia']):
+            return 'comparar_periodos'
+        
+        if any(word in message_lower for word in ['consumo', 'gasto', 'metros', 'm3', 'm³']):
+            return 'consultar_consumo'
+        
+        if any(word in message_lower for word in ['monto', 'pagar', 'cuanto debo', 'cuánto debo', 'valor', 'precio']):
+            return 'consultar_monto'
+        
+        if any(word in message_lower for word in ['estado', 'pagada', 'pendiente', 'vencida']):
+            return 'estado_pago'
+        
+        if any(word in message_lower for word in ['ver', 'mostrar', 'boleta', 'factura']):
+            return 'ver_boleta'
+        
+        # Si menciona "boleta" o "consulta" de forma genérica
+        if 'boleta' in message_lower or 'consulta' in message_lower:
+            return 'ver_boleta'
+        
+        return None
     
     def _build_extraction_prompt(
         self,
