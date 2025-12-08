@@ -240,14 +240,24 @@ class ChatbotService:
             # Llamar a Gemini
             response = self.model.generate_content(prompt)
             
+            # Limpiar respuesta (quitar markdown, espacios, etc)
+            response_text = response.text.strip()
+            
+            # Remover markdown code blocks si existen
+            if response_text.startswith('```'):
+                response_text = response_text.split('```')[1]
+                if response_text.startswith('json'):
+                    response_text = response_text[4:]
+                response_text = response_text.strip()
+            
             # Parsear respuesta JSON
-            extracted = json.loads(response.text)
+            extracted = json.loads(response_text)
             
             logger.info(f"Datos extraídos: {list(extracted.keys())}")
             return extracted
             
-        except json.JSONDecodeError:
-            logger.warning("Respuesta de LLM no es JSON válido")
+        except json.JSONDecodeError as e:
+            logger.warning(f"Respuesta de LLM no es JSON válido: {response.text[:200]}")
             return {}
         except Exception as e:
             logger.error(f"Error en extracción con LLM: {e}")
@@ -270,46 +280,43 @@ class ChatbotService:
         
         current_data_text = json.dumps(current_data, indent=2, ensure_ascii=False)
         
-        prompt = f"""Eres un asistente especializado en emergencias de agua potable de la Cooperativa de Agua Potable.
+        # Mapeo de números a sectores
+        sector_map = {
+            '1': 'anibana',
+            '2': 'el_molino', 
+            '3': 'la_compania',
+            '4': 'el_maiten_1',
+            '5': 'la_morera',
+            '6': 'el_maiten_2',
+            '7': 'santa_margarita'
+        }
+        
+        # Pre-procesar el mensaje para convertir números a sectores
+        processed_message = user_message.strip()
+        if processed_message in sector_map:
+            processed_message = sector_map[processed_message]
+        
+        prompt = f"""Extrae información del mensaje del usuario.
 
-{rag_context}
-
-HISTORIAL DE CONVERSACIÓN:
-{history_text}
-
-DATOS YA RECOLECTADOS:
+DATOS ACTUALES:
 {current_data_text}
 
-MENSAJE ACTUAL DEL USUARIO:
-{user_message}
+MENSAJE: {processed_message}
 
-Tu tarea es extraer la siguiente información del mensaje del usuario y el contexto:
+EXTRAE (solo si están presentes):
+- sector: anibana, el_molino, la_compania, el_maiten_1, la_morera, el_maiten_2, santa_margarita
+- nombre_usuario: nombre completo
+- telefono: número de teléfono
+- direccion: dirección completa
+- descripcion: descripción del problema
+- tipo_emergencia: rotura_matriz, baja_presion, fuga_agua, caneria_rota, agua_contaminada, sin_agua, otro
 
-1. sector: Uno de [anibana, el_molino, la_compania, el_maiten_1, la_morera, el_maiten_2, santa_margarita]
-2. datos_medidor_fuga: Información sobre si el medidor corre, cantidad de agua, tipo de fuga
-3. fecha: Fecha actual o mencionada (formato YYYY-MM-DD)
-4. nombre_usuario: Nombre del usuario
-5. fotografia: Si mencionó que tiene foto (true/false)
-6. direccion: Dirección completa
-7. telefono: Número de teléfono (formato limpio)
-8. tipo_emergencia: Tipo de problema [rotura_matriz, baja_presion, fuga_agua, caneria_rota, agua_contaminada, sin_agua, otro]
-9. descripcion: Descripción detallada del problema
+IMPORTANTE: Responde ÚNICAMENTE con JSON válido. No agregues texto adicional.
 
-INSTRUCCIONES:
-- Solo extrae datos que estén EXPLÍCITAMENTE mencionados
-- No inventes información
-- Mantén datos ya recolectados si no hay nueva información
-- Responde SOLO con un objeto JSON válido
-- Si un dato no está presente, no lo incluyas en el JSON
+Ejemplo válido:
+{{"sector": "el_molino"}}
 
-Ejemplo de respuesta:
-{{
-  "sector": "el_molino",
-  "telefono": "981494350",
-  "descripcion": "Se rompió una cañería"
-}}
-
-Responde SOLO con JSON:"""
+JSON:"""
         
         return prompt
     
@@ -338,10 +345,17 @@ Responde SOLO con JSON:"""
         """
         # Mapeo de campos a preguntas amigables
         questions = {
-            'sector': '¿En qué sector te encuentras? (Anibana, El Molino, La Compañía, El Maitén 1, La Morera, El Maitén 2, Santa Margarita)',
+            'sector': '''¿En qué sector te encuentras? Responde con el número:
+1. Anibana
+2. El Molino
+3. La Compañía
+4. El Maitén 1
+5. La Morera
+6. El Maitén 2
+7. Santa Margarita''',
             'datos_medidor_fuga': '¿Podrías indicarme si el medidor está corriendo y aproximadamente cuánta agua se está fugando?',
-            'nombre_usuario': '¿Cuál es tu nombre?',
-            'fotografia': '¿Tienes una fotografía del problema que puedas compartir? (Opcional)',
+            'nombre_usuario': '¿Cuál es tu nombre completo?',
+            'fotografia': '¿Tienes una fotografía del problema que puedas compartir? (Opcional - responde sí o no)',
             'direccion': '¿Cuál es tu dirección exacta?',
             'telefono': '¿Cuál es tu número de teléfono de contacto?',
             'descripcion': '¿Podrías describir detalladamente el problema que estás enfrentando?',
