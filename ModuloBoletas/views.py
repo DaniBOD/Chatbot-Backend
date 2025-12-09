@@ -140,7 +140,8 @@ class BoletaViewSet(viewsets.ModelViewSet):
         queryset = Boleta.objects.all()
         
         # Aplicar filtros
-        if 'rut' in data:
+        # Only filter by rut when a non-empty value is provided
+        if data.get('rut'):
             queryset = queryset.filter(rut=data['rut'])
         # Soportar búsqueda por nombre completo (campo 'nombre' o 'nombreCompleto' desde frontend)
         # Normalize search name and try accent-insensitive fallback
@@ -151,19 +152,50 @@ class BoletaViewSet(viewsets.ModelViewSet):
             search_name = data.get('nombreCompleto')
 
         if search_name:
-            # Build accent-stripped variant
+            # Accent-insensitive match by normalizing both DB values and search term in Python
             def strip_accents(s):
                 return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c))
 
-            ascii_name = strip_accents(search_name)
-            # Try both original and ascii-only to match DB values with/without accents
-            queryset = queryset.filter(
-                Q(nombre__icontains=search_name) | Q(nombre__icontains=ascii_name)
-            )
-        if 'periodo' in data:
+            target = strip_accents(search_name).lower()
+            # Break target into tokens to allow partial & reordered name matches
+            tokens = [t for t in target.split() if t]
+
+            # Collect matching ids by iterating names (SQLite doesn't have unaccent)
+            candidates = queryset.values_list('id_boleta', 'nombre')
+            matching_ids = []
+            for _id, nombre in candidates:
+                if not nombre:
+                    continue
+                nombre_norm = strip_accents(nombre).lower()
+                # Require that all tokens appear in the normalized nombre (order-insensitive)
+                if all(tok in nombre_norm for tok in tokens):
+                    matching_ids.append(_id)
+
+            # Log debug info to help diagnose no-results cases
+            try:
+                logger.debug(f"Buscar por nombre: search_name={search_name!r}, tokens={tokens}, matches={len(matching_ids)}")
+            except Exception:
+                logger.debug("Buscar por nombre: debug info unavailable")
+
+            # Filter queryset to only matching ids (if none, result will be empty)
+            if matching_ids:
+                queryset = queryset.filter(id_boleta__in=matching_ids)
+            else:
+                # No matches found with strict token inclusion; try a looser substring fallback
+                fallback_ids = []
+                for _id, nombre in candidates:
+                    if not nombre:
+                        continue
+                    nombre_norm = strip_accents(nombre).lower()
+                    if target in nombre_norm:
+                        fallback_ids.append(_id)
+                logger.debug(f"Buscar por nombre: fallback matches={len(fallback_ids)}")
+                if fallback_ids:
+                    queryset = queryset.filter(id_boleta__in=fallback_ids)
+        if data.get('periodo'):
             queryset = queryset.filter(periodo_facturacion=data['periodo'])
         # permitir filtrar por estado de pago
-        if 'estado_pago' in data:
+        if data.get('estado_pago'):
             queryset = queryset.filter(estado_pago=data['estado_pago'])
         # si solicitan solo la boleta vigente para pagar (la más reciente pendiente)
         if data.get('solo_vigente'):
