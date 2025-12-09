@@ -46,7 +46,6 @@ class Migration(migrations.Migration):
                 ],
                 'unique_together': {('rut', 'periodo_facturacion')},
             },
-            },
         ),
         migrations.CreateModel(
             name='ChatConversation',

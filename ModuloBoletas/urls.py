@@ -8,7 +8,10 @@ from . import views
 
 # Router para ViewSets
 router = DefaultRouter()
-router.register(r'boletas', views.BoletaViewSet, basename='boleta')
+# Registrar el ViewSet de boletas en la raíz del módulo para que las rutas sean:
+#  - /api/boletas/       -> list/create
+#  - /api/boletas/consultar/ -> action consultar
+router.register(r'', views.BoletaViewSet, basename='boleta')
 router.register(r'conversaciones', views.ChatConversationViewSet, basename='conversacion')
 
 # URLs del módulo

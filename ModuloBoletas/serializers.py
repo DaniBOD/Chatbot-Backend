@@ -273,12 +273,21 @@ class BoletaConsultaSerializer(serializers.Serializer):
     rut = serializers.CharField(
         max_length=12,
         required=False,
+        allow_blank=True,
         help_text='RUT del cliente en formato XX.XXX.XXX-X'
     )
     periodo_facturacion = serializers.CharField(
         max_length=20,
         required=False,
+        allow_blank=True,
         help_text='Período de facturación (ejemplo: 2025-11)'
+    )
+    # Alias para frontend que may send `periodo`
+    periodo = serializers.CharField(
+        max_length=20,
+        required=False,
+        allow_blank=True,
+        help_text='Alias: periodo (mapeado a periodo_facturacion)'
     )
     fecha_inicio = serializers.DateField(
         required=False,
@@ -288,15 +297,54 @@ class BoletaConsultaSerializer(serializers.Serializer):
         required=False,
         help_text='Fecha de fin del rango de consulta'
     )
+    estado_pago = serializers.CharField(
+        max_length=20,
+        required=False,
+        help_text='Filtrar por estado de pago (ej: pendiente, pagada)'
+    )
+    solo_vigente = serializers.BooleanField(
+        required=False,
+        help_text='Si true, devuelve únicamente la boleta vigente para pagar (la más reciente pendiente)'
+    )
+    # Soportar búsqueda por nombre completo (frontend usa nombreCompleto)
+    nombre = serializers.CharField(
+        max_length=200,
+        required=False,
+        allow_blank=True,
+        help_text='Nombre completo del titular (búsqueda parcial)'
+    )
+    nombreCompleto = serializers.CharField(
+        max_length=200,
+        required=False,
+        allow_blank=True,
+        help_text='Alias para nombre completo (acepta camelCase enviado por frontend)'
+    )
     
     def validate(self, data):
         """
         Valida que al menos un criterio de búsqueda esté presente
         """
+        # If frontend sent `periodo`, map it to `periodo_facturacion`
+        if 'periodo' in data and 'periodo_facturacion' not in data:
+            data['periodo_facturacion'] = data.get('periodo')
+
+        # Normalize rut (strip spaces)
+        if data.get('rut') and isinstance(data.get('rut'), str):
+            data['rut'] = data['rut'].strip()
+        # Normalize names: strip whitespace
+        if data.get('nombre') and isinstance(data.get('nombre'), str):
+            data['nombre'] = data['nombre'].strip()
+        if data.get('nombreCompleto') and isinstance(data.get('nombreCompleto'), str):
+            data['nombreCompleto'] = data['nombreCompleto'].strip()
+
         if not any([
             data.get('rut'),
             data.get('periodo_facturacion'),
-            data.get('fecha_inicio')
+            data.get('fecha_inicio'),
+            data.get('estado_pago'),
+            data.get('solo_vigente'),
+            data.get('nombre'),
+            data.get('nombreCompleto')
         ]):
             raise serializers.ValidationError(
                 'Debe proporcionar al menos un criterio de búsqueda: rut, periodo_facturacion o fecha_inicio'
@@ -307,6 +355,13 @@ class BoletaConsultaSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 'Si proporciona fecha_inicio, debe proporcionar también fecha_fin'
             )
+
+        # Si se solicita solo_vigente debe indicar RUT para saber a quién corresponde
+        if data.get('solo_vigente') and not data.get('rut'):
+            raise serializers.ValidationError(
+                'Para pedir solo_vigente debe indicar el campo rut'
+            )
+
         
         # Validar que fecha_fin sea posterior a fecha_inicio
         if data.get('fecha_inicio') and data.get('fecha_fin'):

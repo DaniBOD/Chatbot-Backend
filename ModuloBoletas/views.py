@@ -25,6 +25,7 @@ from .serializers import (
     BoletaConsultaSerializer
 )
 from .services.chatbot_service import get_chatbot_service
+import unicodedata
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,7 @@ class BoletaViewSet(viewsets.ModelViewSet):
             return BoletaSimpleSerializer
         return BoletaSerializer
     
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post'], url_path='consultar')
     def consultar(self, request):
         """
         Consulta boletas con criterios múltiples
@@ -104,31 +105,101 @@ class BoletaViewSet(viewsets.ModelViewSet):
             "fecha_fin": "2024-12-31"
         }
         """
-        serializer = BoletaConsultaSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
-        data = serializer.validated_data
+        # Agregar logging detallado para diagnosticar 400s desde el frontend
+        try:
+            logger.debug(f"Consultar boletas - request.content_type={request.content_type}")
+            logger.debug(f"Consultar boletas - request.META keys: {list(request.META.keys())[:20]}")
+            # Intentar leer el body crudo primero (puede fallar si ya fue consumido)
+            raw = ''
+            try:
+                raw = request.body.decode('utf-8') if getattr(request, 'body', None) else ''
+            except Exception as ex:
+                # Evitar RawPostDataException que ocurre si request.data ya fue leído
+                raw = f'<raw body not available: {ex.__class__.__name__}>'
+            logger.debug(f"Consultar boletas - raw body: {raw}")
+
+            # request.data puede procesar el body; loguearlo (siempre que no sea muy grande)
+            try:
+                logger.debug(f"Consultar boletas - request.data: {request.data}")
+            except Exception:
+                logger.debug("Consultar boletas - request.data: <no disponible>")
+
+            serializer = BoletaConsultaSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            data = serializer.validated_data
+        except Exception as e:
+            # Registrar error y devolver detalle en la respuesta para facilitar debugging
+            logger.error("Error validando BoletaConsultaSerializer", exc_info=True)
+            # Si es un ValidationError de DRF, extraer detalles
+            from rest_framework.exceptions import ValidationError
+            if isinstance(e, ValidationError):
+                logger.error(f"Validation errors: {e.detail}")
+                return Response({'error': 'Validation error', 'detail': e.detail}, status=status.HTTP_400_BAD_REQUEST)
+            # En caso contrario, devolver un error genérico con el mensaje
+            return Response({'error': 'Error procesando la solicitud', 'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         queryset = Boleta.objects.all()
         
         # Aplicar filtros
         if 'rut' in data:
             queryset = queryset.filter(rut=data['rut'])
+        # Soportar búsqueda por nombre completo (campo 'nombre' o 'nombreCompleto' desde frontend)
+        # Normalize search name and try accent-insensitive fallback
+        search_name = None
+        if data.get('nombre'):
+            search_name = data.get('nombre')
+        elif data.get('nombreCompleto'):
+            search_name = data.get('nombreCompleto')
+
+        if search_name:
+            # Build accent-stripped variant
+            def strip_accents(s):
+                return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c))
+
+            ascii_name = strip_accents(search_name)
+            # Try both original and ascii-only to match DB values with/without accents
+            queryset = queryset.filter(
+                Q(nombre__icontains=search_name) | Q(nombre__icontains=ascii_name)
+            )
         if 'periodo' in data:
             queryset = queryset.filter(periodo_facturacion=data['periodo'])
+        # permitir filtrar por estado de pago
+        if 'estado_pago' in data:
+            queryset = queryset.filter(estado_pago=data['estado_pago'])
+        # si solicitan solo la boleta vigente para pagar (la más reciente pendiente)
+        if data.get('solo_vigente'):
+            queryset = queryset.filter(estado_pago='pendiente')
+            boleta_vigente = queryset.order_by('-fecha_emision').first()
+            detalle = bool(request.data.get('detailed') or request.data.get('detalle'))
+            if not boleta_vigente:
+                return Response([], status=status.HTTP_200_OK)
+            serializer_cls = BoletaSerializer if detalle else BoletaSimpleSerializer
+            serializer = serializer_cls(boleta_vigente)
+            return Response(serializer.data)
         if 'fecha_inicio' in data:
             queryset = queryset.filter(fecha_emision__gte=data['fecha_inicio'])
         if 'fecha_fin' in data:
             queryset = queryset.filter(fecha_emision__lte=data['fecha_fin'])
         
         queryset = queryset.order_by('-fecha_emision')
+        try:
+            logger.debug(f"Consultar boletas - queryset SQL: {queryset.query}")
+            logger.debug(f"Consultar boletas - queryset count (pre-paginate): {queryset.count()}")
+        except Exception:
+            logger.debug("Consultar boletas - queryset debug unavailable")
         
+        # Determinar el nivel de detalle: por defecto mostramos datos resumidos
+        detalle = False
+        if request.data and isinstance(request.data, dict):
+            detalle = bool(request.data.get('detailed') or request.data.get('detalle'))
         # Paginar resultados
         page = self.paginate_queryset(queryset)
         if page is not None:
-            serializer = BoletaSerializer(page, many=True)
+            serializer_cls = BoletaSerializer if detalle else BoletaSimpleSerializer
+            serializer = serializer_cls(page, many=True)
             return self.get_paginated_response(serializer.data)
-        
-        serializer = BoletaSerializer(queryset, many=True)
+
+        serializer_cls = BoletaSerializer if detalle else BoletaSimpleSerializer
+        serializer = serializer_cls(queryset, many=True)
         return Response(serializer.data)
     
     @action(detail=True, methods=['get'])
@@ -166,13 +237,16 @@ class BoletaViewSet(viewsets.ModelViewSet):
         
         boletas = Boleta.objects.filter(rut=rut).order_by('-fecha_emision')
         
+        # Determinar nivel de detalle (por defecto resumido)
+        detalle = request.query_params.get('detailed', request.query_params.get('detalle', 'false')).lower() == 'true'
         # Paginar resultados
         page = self.paginate_queryset(boletas)
+        serializer_cls = BoletaSerializer if detalle else BoletaSimpleSerializer
         if page is not None:
-            serializer = BoletaSerializer(page, many=True)
+            serializer = serializer_cls(page, many=True)
             return self.get_paginated_response(serializer.data)
-        
-        serializer = BoletaSerializer(boletas, many=True)
+
+        serializer = serializer_cls(boletas, many=True)
         return Response(serializer.data)
     
     @action(detail=False, methods=['post'])
@@ -209,10 +283,29 @@ class BoletaViewSet(viewsets.ModelViewSet):
                 {'error': 'No se encontraron boletas para comparar'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
-        # Calcular estadísticas comparativas
-        consumo_promedio = boletas.aggregate(Avg('consumo'))['consumo__avg']
-        monto_promedio = boletas.aggregate(Avg('monto'))['monto__avg']
+            data = serializer.validated_data
+            queryset = Boleta.objects.all()
+            if 'rut' in data:
+                queryset = queryset.filter(rut=data['rut'])
+            if 'periodo' in data:
+                queryset = queryset.filter(periodo_facturacion=data['periodo'])
+            if 'fecha_inicio' in data:
+                queryset = queryset.filter(fecha_emision__gte=data['fecha_inicio'])
+            if 'fecha_fin' in data:
+                queryset = queryset.filter(fecha_emision__lte=data['fecha_fin'])
+            if 'estado_pago' in data:
+                queryset = queryset.filter(estado_pago=data['estado_pago'])
+            if 'vencidas' in data and str(data['vencidas']).lower() == 'true':
+                queryset = queryset.filter(fecha_vencimiento__lt=datetime.now().date(), estado_pago='pendiente')
+            queryset = queryset.order_by('-fecha_emision')
+            page = self.paginate_queryset(queryset)
+            if page is not None:
+                serializer = BoletaSerializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+            serializer = BoletaSerializer(queryset, many=True)
+            return Response(serializer.data)
+        # Si no, crear boleta normalmente
+        return super().create(request, *args, **kwargs)
         consumo_total = boletas.aggregate(Sum('consumo'))['consumo__sum']
         monto_total = boletas.aggregate(Sum('monto'))['monto__sum']
         
