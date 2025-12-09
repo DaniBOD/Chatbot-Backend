@@ -1,0 +1,11 @@
+Source: https://www.facebook.com/cooplaciacl/?locale=es_LA
+Title: Facebook - Cooperativa de agua potable La Compañía | Graneros
+
+Resumen y contenido extraído:
+Página oficial de Facebook de la Cooperativa de Agua Potable La Compañía. La página contiene publicaciones, imágenes y posiblemente información de contacto y eventos. El contenido completo de publicaciones y comentarios requiere iniciar sesión en Facebook; por ello, este archivo documenta la existencia de la página, su URL y que puede contener noticias, avisos y comunicación con usuarios.
+
+Notas:
+- Acceso limitado sin sesión.
+- Si se desea extraer publicaciones públicas se debería usar Facebook Graph API (requiere token) o descargar manualmente el contenido público.
+
+Extracted for RAG ingestion: registro de la página de Facebook como fuente potencial de anuncios, noticias y avisos para usuarios; se recomienda obtener permisos o usar APIs si se requiere texto completo de publicaciones.

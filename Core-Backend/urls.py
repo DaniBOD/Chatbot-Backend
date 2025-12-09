@@ -18,11 +18,14 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from ModuloBoletas import views as boletas_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/emergencias/', include('ModuloEmergencia.urls')),
     path('api/boletas/', include('ModuloBoletas.urls')),
+    # Endpoint público anónimo para preguntas generales (RAG-only)
+    path('api/public/chat/message/', boletas_views.public_chat_message),
 ]
 
 # Servir archivos media en desarrollo

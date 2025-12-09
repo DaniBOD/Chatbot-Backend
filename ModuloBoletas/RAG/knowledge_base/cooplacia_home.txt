@@ -1,0 +1,17 @@
+Source: https://www.cooplacia.cl/base/frontend/home.php
+Title: COOPERATIVA DE AGUA POTABLE LA COMPAÑIA
+
+Resumen y contenido extraído:
+La Cooperativa de Agua Potable La Compañía es una entidad que provee servicios de agua potable en la zona. En su sitio web se destacan secciones como Oficina Virtual, Pago en Línea, Galería, Biblioteca, Preguntas Frecuentes y "Conozca su Boleta". Se indican horarios de atención: Lunes a Viernes, Mañana: 09:00 - 13:00 hrs; Tarde: 14:00 - 16:45 hrs. También se menciona la política de privacidad y contactos en el sitio.
+
+Sección 'Conozca su Boleta' dirige a https://www.cooplacia.cl/base/frontend/boleta.php
+Galería: https://www.cooplacia.cl/base/frontend/galerias.php
+Biblioteca: https://www.cooplacia.cl/base/frontend/biblioteca.php
+Preguntas Frecuentes: https://www.cooplacia.cl/base/frontend/preguntas-frecuentes.php
+Política de privacidad: https://www.cooplacia.cl/base/frontend/privacy.php
+
+Notas:
+- El sitio contiene imágenes de banners y menús.
+- El footer indica "DISEÑADO Y DESARROLLADO POR ASESORA SPA" y copyright 2025.
+
+Extracted for RAG ingestion: this file contains the main public-facing information available on the homepage suitable for user-facing Q&A about services, schedules, and links to resources.

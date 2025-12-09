@@ -299,50 +299,38 @@ class BoletaViewSet(viewsets.ModelViewSet):
         boletas_ids = request.data.get('boletas_ids', [])
         rut = request.data.get('rut')
         periodos = request.data.get('periodos', [])
-        
+
+        # If explicit boletas_ids provided, retrieve those
         if boletas_ids:
             boletas = Boleta.objects.filter(id_boleta__in=boletas_ids)
+        # If rut + periodos provided, retrieve those
         elif rut and periodos:
             boletas = Boleta.objects.filter(rut=rut, periodo_facturacion__in=periodos)
+        # If only rut provided, return candidate boletas for selection
+        elif rut:
+            candidates = Boleta.objects.filter(rut=rut).order_by('-fecha_emision')[:12]
+            serializer = BoletaSimpleSerializer(candidates, many=True)
+            return Response({'candidates': serializer.data})
         else:
             return Response(
-                {'error': 'Debe proporcionar boletas_ids o (rut + periodos)'},
+                {'error': 'Debe proporcionar boletas_ids o rut'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         if not boletas.exists():
             return Response(
                 {'error': 'No se encontraron boletas para comparar'},
                 status=status.HTTP_404_NOT_FOUND
             )
-            data = serializer.validated_data
-            queryset = Boleta.objects.all()
-            if 'rut' in data:
-                queryset = queryset.filter(rut=data['rut'])
-            if 'periodo' in data:
-                queryset = queryset.filter(periodo_facturacion=data['periodo'])
-            if 'fecha_inicio' in data:
-                queryset = queryset.filter(fecha_emision__gte=data['fecha_inicio'])
-            if 'fecha_fin' in data:
-                queryset = queryset.filter(fecha_emision__lte=data['fecha_fin'])
-            if 'estado_pago' in data:
-                queryset = queryset.filter(estado_pago=data['estado_pago'])
-            if 'vencidas' in data and str(data['vencidas']).lower() == 'true':
-                queryset = queryset.filter(fecha_vencimiento__lt=datetime.now().date(), estado_pago='pendiente')
-            queryset = queryset.order_by('-fecha_emision')
-            page = self.paginate_queryset(queryset)
-            if page is not None:
-                serializer = BoletaSerializer(page, many=True)
-                return self.get_paginated_response(serializer.data)
-            serializer = BoletaSerializer(queryset, many=True)
-            return Response(serializer.data)
-        # Si no, crear boleta normalmente
-        return super().create(request, *args, **kwargs)
-        consumo_total = boletas.aggregate(Sum('consumo'))['consumo__sum']
-        monto_total = boletas.aggregate(Sum('monto'))['monto__sum']
-        
+
+        # Calcular estadísticas
+        consumo_total = boletas.aggregate(Sum('consumo'))['consumo__sum'] or 0
+        monto_total = boletas.aggregate(Sum('monto'))['monto__sum'] or 0
+        consumo_promedio = boletas.aggregate(Avg('consumo'))['consumo__avg'] or 0
+        monto_promedio = boletas.aggregate(Avg('monto'))['monto__avg'] or 0
+
         serializer = BoletaSerializer(boletas, many=True)
-        
+
         return Response({
             'cantidad_boletas': boletas.count(),
             'boletas': serializer.data,
@@ -536,12 +524,49 @@ def chat_message(request):
     serializer = ChatRequestSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     
-    session_id = serializer.validated_data['session_id']
     user_message = serializer.validated_data['message']
-    
+
+    # Support passing boletas_ids from frontend to provide immediate context
+    boletas_ids = request.data.get('boletas_ids', [])
+
     try:
-        # Procesar mensaje con el servicio de chatbot
+        # Ensure we have a chatbot service instance
         chatbot_service = get_chatbot_service()
+
+        # session_id may be optional from frontend; create one if missing
+        session_id = serializer.validated_data.get('session_id')
+        if not session_id:
+            session_id = str(uuid.uuid4())
+            # start a conversation so it's available for processing
+            try:
+                conversation, initial_message = chatbot_service.start_conversation(session_id)
+            except Exception as e:
+                logger.warning(f"No se pudo iniciar conversación automáticamente: {e}")
+        
+
+        # If boletas_ids provided, attach boletas to the conversation for context
+        if boletas_ids:
+            try:
+                conversation = ChatConversation.objects.get(session_id=session_id)
+                from .models import Boleta as _Boleta
+                boletas_qs = _Boleta.objects.filter(id_boleta__in=boletas_ids).order_by('-fecha_emision')
+                if boletas_qs.exists():
+                    # set boleta_principal to the most recent selected
+                    first = boletas_qs.first()
+                    datos = conversation.datos_recolectados or {}
+                    datos['rut'] = first.rut
+                    conversation.datos_recolectados = datos
+                    conversation.boleta_principal = first
+                    # set many-to-many of compared boletas
+                    conversation.boletas_comparadas.set(boletas_qs)
+                    conversation.es_consulta_comparativa = boletas_qs.count() > 1
+                    # set state accordingly
+                    conversation.estado = 'comparando' if boletas_qs.count() > 1 else 'consultando'
+                    conversation.save()
+            except Exception as e:
+                logger.warning(f"No se pudo adjuntar boletas al contexto de la conversación: {e}")
+
+        # Procesar mensaje con el servicio de chatbot
         response_data = chatbot_service.process_message(session_id, user_message)
         
         # Agregar session_id a la respuesta
@@ -617,3 +642,84 @@ def rag_stats(request):
             {'error': 'Error al obtener estadísticas'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@api_view(['POST'])
+def public_chat_message(request):
+    """
+    Endpoint público para preguntas generales (anónimas).
+
+    POST /api/public/chat/message/
+    Body: { "message": "texto de la consulta" }
+
+    Este endpoint utiliza únicamente el RAG retriever y el modelo para
+    generar una respuesta concisa sin crear ni persistir conversaciones
+    en la base de datos. No se deben solicitar ni registrar datos personales.
+    """
+    try:
+        data = request.data or {}
+        user_message = data.get('message', '')
+        if not user_message:
+            return Response({'error': 'message field requerido'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Obtener contexto RAG (si está disponible)
+        try:
+            from .RAG.retriever import get_rag_retriever
+            rag_retriever = get_rag_retriever()
+            rag_context = rag_retriever.get_relevant_context_text(query=user_message, max_length=1500)
+        except Exception as e:
+            logger.warning(f"No se pudo obtener contexto RAG: {e}")
+            rag_context = ""
+
+        # Construir prompt para respuesta anónima y breve
+        prompt = f"""Eres un asistente público y anónimo para la Cooperativa de Agua.
+    Usa únicamente la información pública disponible (si existe) y responde de forma clara y útil.
+    No pidas ni solicites datos personales (RUT, número de cliente, teléfono, etc.).
+
+    Contexto recuperado (fragmentos con fuente):
+    {rag_context}
+
+    Pregunta del usuario:
+    {user_message}
+
+    Instrucciones de formato:
+    - Responde en 4-6 oraciones claras y útiles.
+    - Incluye al final una línea corta con referencias a las fuentes usadas en formato: "Fuentes: [1] URL, [2] URL" (usa los índices provistos en el contexto si están disponibles).
+    - Si no hay información en la base de conocimientos, indica que no se encontró y sugiere cómo el usuario puede contactar a la cooperativa.
+    - No solicites datos personales en ningún caso."""
+
+        # Generar respuesta usando el modelo (sin crear conversaciones)
+        chatbot_service = get_chatbot_service()
+        try:
+            # Increase allowed tokens to reduce chance of truncated replies
+            response = chatbot_service.model.generate_content(prompt, generation_config={'temperature': 0.1, 'max_output_tokens': 400})
+            bot_text = response.text.strip()
+            # If the response looks too short or abruptly cut, do one retry asking to expand
+            short_threshold = 40
+            ends_proper = bot_text.endswith('.') or bot_text.endswith('!') or bot_text.endswith('?')
+            if (not bot_text) or (len(bot_text) < short_threshold) or (not ends_proper):
+                logger.info('Public chat response appears short or incomplete; attempting one retry to expand it')
+                followup_prompt = f"""La respuesta anterior fue:
+{bot_text}
+
+Por favor, completa y expande la respuesta anterior en 3-4 frases útiles, sin pedir datos personales, manteniendo el mismo tono amistoso y claro."""
+                try:
+                    follow_resp = chatbot_service.model.generate_content(followup_prompt, generation_config={'temperature': 0.15, 'max_output_tokens': 300})
+                    follow_text = follow_resp.text.strip()
+                    if follow_text:
+                        bot_text = follow_text
+                except Exception as re:
+                    logger.warning(f"Retry to expand public response failed: {re}")
+        except Exception as e:
+            msg = str(e).lower()
+            if 'quota' in msg or '429' in msg or 'rate limit' in msg or 'quota exceeded' in msg:
+                logger.warning(f"Public chat generation failed due to quota/rate-limit: {e}")
+                return Response({'message': 'Disculpa, el servicio de generación está temporalmente limitado por cuota. Por favor intenta de nuevo en unos segundos.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            logger.error(f"Error generando respuesta pública: {e}")
+            return Response({'error': 'Error generando respuesta', 'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({'message': bot_text})
+
+    except Exception as e:
+        logger.error(f"Error en public_chat_message: {e}")
+        return Response({'error': 'Error procesando petición', 'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

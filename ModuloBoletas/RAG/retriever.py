@@ -112,23 +112,36 @@ class RAGRetriever:
             Contexto como texto plano
         """
         documents = self.retrieve(query, top_k)
-        
+
         if not documents:
             return "No se encontró información relevante en la base de conocimientos."
-        
-        # Construir texto de contexto
-        context_parts = ["INFORMACIÓN RELEVANTE SOBRE BOLETAS DE AGUA:"]
+
+        # Construir texto de contexto con fragmentos acotados y referencia a la fuente
+        context_parts = ["INFORMACIÓN RELEVANTE (fragmentos y fuentes):"]
         current_length = len(context_parts[0])
-        
+
+        # Limitar la longitud por documento para evitar prompts excesivos
+        per_doc_limit = 600
+
         for i, doc in enumerate(documents, 1):
-            doc_text = f"\n\n{i}. {doc['content']}"
-            
+            raw_content = doc.get('content', '') or ''
+            # Recortar a per_doc_limit caracteres
+            snippet = raw_content.strip()
+            if len(snippet) > per_doc_limit:
+                snippet = snippet[:per_doc_limit].rsplit(' ', 1)[0] + '...'
+
+            # Intentar obtener una URL o nombre de fuente en metadatos
+            metadata = doc.get('metadata', {}) or {}
+            source = metadata.get('source_url') or metadata.get('source_path') or metadata.get('source_file') or 'Desconocido'
+
+            doc_text = f"\n\n[{i}] Fuente: {source}\n{snippet}"
+
             if current_length + len(doc_text) > max_length:
                 break
-            
+
             context_parts.append(doc_text)
             current_length += len(doc_text)
-        
+
         return "".join(context_parts)
     
     def _format_results(self, raw_results: Dict[str, Any]) -> List[Dict[str, Any]]:

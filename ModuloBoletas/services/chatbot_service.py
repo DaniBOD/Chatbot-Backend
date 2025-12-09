@@ -399,10 +399,14 @@ class ChatbotService:
         """
         Maneja consultas comparativas
         """
-        rut = conversation.datos_recolectados.get('rut')
-        boletas = Boleta.objects.filter(rut=rut).order_by('-fecha_emision')[:6]
-        
-        if boletas.count() < 2:
+        # Prefer boletas previamente seleccionadas/adjuntadas a la conversación
+        boletas = list(conversation.boletas_comparadas.all().order_by('-fecha_emision')) if hasattr(conversation, 'boletas_comparadas') else []
+        if not boletas:
+            rut = conversation.datos_recolectados.get('rut')
+            if rut:
+                boletas = list(Boleta.objects.filter(rut=rut).order_by('-fecha_emision')[:6])
+
+        if len(boletas) < 2:
             mensaje = "Solo tienes una boleta registrada. Para comparaciones necesitas al menos dos boletas."
         else:
             # Generar análisis comparativo con LLM
@@ -490,7 +494,12 @@ class ChatbotService:
             logger.warning(f"⚠️  Respuesta de Gemini no es JSON válido: {e}")
             logger.warning(f"Respuesta recibida: {response_text[:200] if 'response_text' in locals() else 'N/A'}")
         except Exception as e:
-            logger.error(f"❌ Error en extracción con Gemini API: {e}")
+            # Detectar errores de cuota/429 y dejar que el fallback por regex maneje la extracción
+            msg = str(e).lower()
+            if 'quota' in msg or '429' in msg or 'rate limit' in msg or 'quota exceeded' in msg:
+                logger.warning(f"❌ Gemini quota/rate-limit error detected: {e}")
+            else:
+                logger.error(f"❌ Error en extracción con Gemini API: {e}")
         
         # FALLBACK: Extracción por regex si Gemini falla o no retorna datos completos
         logger.info("🔄 Usando regex como fallback...")
@@ -798,6 +807,10 @@ Responde en máximo 3-4 líneas:"""
             response = self.model.generate_content(prompt)
             return response.text.strip()
         except Exception as e:
+            msg = str(e).lower()
+            if 'quota' in msg or '429' in msg or 'rate limit' in msg or 'quota exceeded' in msg:
+                logger.warning(f"Generación contextual falló por cuota/rate-limit: {e}")
+                return "Disculpa, el servicio de generación está temporalmente limitado. Intenta nuevamente en unos segundos o usa la sección anónima para información general."
             logger.error(f"Error generando respuesta contextual: {e}")
             return "Disculpa, tuve un problema procesando tu consulta. ¿Podrías reformular tu pregunta?"
     
@@ -844,6 +857,10 @@ Responde:"""
             response = self.model.generate_content(prompt)
             return response.text.strip()
         except Exception as e:
+            msg = str(e).lower()
+            if 'quota' in msg or '429' in msg or 'rate limit' in msg or 'quota exceeded' in msg:
+                logger.warning(f"Análisis comparativo falló por cuota/rate-limit: {e}")
+                return "Lo siento, el servicio de generación está limitado temporalmente; aquí tienes un resumen básico:" + self._generar_comparacion(boletas)
             logger.error(f"Error generando análisis comparativo: {e}")
             return self._generar_comparacion(boletas)
     

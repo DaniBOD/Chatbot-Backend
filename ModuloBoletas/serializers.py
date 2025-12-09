@@ -177,8 +177,9 @@ class ChatRequestSerializer(serializers.Serializer):
     """
     session_id = serializers.CharField(
         max_length=100,
-        required=True,
-        help_text='ID único de la sesión de chat'
+        required=False,
+        allow_blank=True,
+        help_text='ID único de la sesión de chat (opcional; se generará si no se proporciona)'
     )
     message = serializers.CharField(
         required=True,
@@ -356,10 +357,10 @@ class BoletaConsultaSerializer(serializers.Serializer):
                 'Si proporciona fecha_inicio, debe proporcionar también fecha_fin'
             )
 
-        # Si se solicita solo_vigente debe indicar RUT para saber a quién corresponde
-        if data.get('solo_vigente') and not data.get('rut'):
+        # Si se solicita solo_vigente debe indicar algún identificador (rut o nombre)
+        if data.get('solo_vigente') and not any([data.get('rut'), data.get('nombre'), data.get('nombreCompleto')]):
             raise serializers.ValidationError(
-                'Para pedir solo_vigente debe indicar el campo rut'
+                'Para pedir solo_vigente debe indicar el campo rut o un nombre (nombre o nombreCompleto)'
             )
 
         
